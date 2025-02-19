@@ -48,6 +48,29 @@ const int kMmapFd = -1;
 #endif
 
 const int kMmapFdOffset = 0;
+#ifdef DOBBY_DEBUG
+
+#include <dlfcn.h>
+#include <unwind.h>
+
+struct BacktraceState {
+    void** current;
+    void** end;
+};
+
+static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context* context, void* arg) {
+    BacktraceState* state = static_cast<BacktraceState*>(arg);
+    uintptr_t pc = _Unwind_GetIP(context);
+    if (pc) {
+        if (state->current == state->end) {
+            return _URC_END_OF_STACK;
+        } else {
+            *state->current++ = reinterpret_cast<void*>(pc);
+        }
+    }
+    return _URC_NO_REASON;
+}
+#endif
 
 // ================================================================
 // base :: Thread
@@ -160,16 +183,81 @@ bool OSMemory::Release(void *address, size_t size) {
 }
 
 bool OSMemory::SetPermission(void *address, size_t size, MemoryPermission access) {
-  DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % PageSize());
-  DCHECK_EQ(0, size % PageSize());
+#ifdef DOBBY_DEBUG
+    // 获取调用堆栈
+    const int max_frames = 64;
+    void* buffer[max_frames];
+    BacktraceState state = {buffer, buffer + max_frames};
+    _Unwind_Backtrace(unwind_callback, &state);
+    int count = state.current - buffer;
 
-  int prot = GetProtectionFromMemoryPermission(access);
-  int ret = mprotect(address, size, prot);
-  if (ret) {
-    ERROR_LOG("OSMemory::SetPermission: %s\n", ((const char *)strerror(errno)));
-  }
+    // 打印调用堆栈
+    INFO_LOG("Call stack:");
+    for (int i = 0; i < count; ++i) {
+        Dl_info info;
+        const void* addr = buffer[i];
+        if (dladdr(addr, &info)) {
+            INFO_LOG("  #%d: %p %s", i, addr, info.dli_sname ? info.dli_sname : "<unknown>");
+        } else {
+            INFO_LOG("  #%d: %p", i, addr);
+        }
+    }
+    
+    INFO_LOG("[SetPermission] Input - address: %p, size: %zu, access: %d", address, size, access);
 
-  return ret == 0;
+    uintptr_t addr_value = reinterpret_cast<uintptr_t>(address);
+    size_t page_size = PageSize();
+    INFO_LOG("[SetPermission] PageSize: %zu", page_size);
+    INFO_LOG("[SetPermission] Address alignment check: %zu", addr_value % page_size);
+    INFO_LOG("[SetPermission] Size alignment check: %zu", size % page_size);
+
+    // 打印内存映射
+    char maps_path[64];
+    snprintf(maps_path, sizeof(maps_path), "/proc/self/maps");
+    FILE* fp = fopen(maps_path, "r");
+    if (fp) {
+        char line[512];
+        INFO_LOG("[SetPermission] Current memory mappings around %p:", address);
+        while (fgets(line, sizeof(line), fp)) {
+            if (strstr(line, "r-xp") || strstr(line, "rwxp")) {
+                INFO_LOG("%s", line);
+            }
+        }
+        fclose(fp);
+    }
+#endif
+
+    DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % PageSize());
+    DCHECK_EQ(0, size % PageSize());
+
+    int prot = GetProtectionFromMemoryPermission(access);
+#ifdef DOBBY_DEBUG
+    INFO_LOG("[SetPermission] Requested protection: 0x%x", prot);
+#endif
+
+    int ret = mprotect(address, size, prot);
+    if (ret) {
+        int error_code = errno;
+#ifdef DOBBY_DEBUG
+        ERROR_LOG("[SetPermission] Failed - errno: %d, message: %s", error_code, strerror(error_code));
+
+        if (error_code == EACCES) {
+            INFO_LOG("[SetPermission] Current process uid: %d, euid: %d", getuid(), geteuid());
+        }
+        else if (error_code == ENOMEM) {
+            INFO_LOG("[SetPermission] Address range: %p - %p", address, (char*)address + size);
+        }
+#else
+        ERROR_LOG("OSMemory::SetPermission: %s\n", ((const char *)strerror(error_code)));
+#endif
+    }
+#ifdef DOBBY_DEBUG
+    else {
+        INFO_LOG("[SetPermission] Successfully changed permission");
+    }
+#endif
+
+    return ret == 0;
 }
 
 // --- OSPrint

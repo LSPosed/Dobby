@@ -1,0 +1,252 @@
+package {
+    default_visibility: ["//visibility:public"],
+}
+
+genrule {
+    name: "generate_dobby_version",
+    cmd: "echo '#define DOBBY_VERSION \"1.0\"' > $(out)",
+    out: ["version.h"],
+}
+ 
+
+cc_library_static {
+    name: "logging",
+    host_supported: true,
+    vendor_available: true,
+    recovery_available: true, 
+    srcs: [
+        "external/logging/logging.c",
+        "external/logging/cxxlogging.cc",
+    ],
+    export_include_dirs: [
+        "external/logging",
+    ],
+    cflags: [
+        "-DLOGGING_ENABLED",
+    ],
+    defaults: ["plugin_defaults"],
+    static_libs: ["libxc++_static"],
+    header_libs: ["libxc++_headers"],
+}
+
+cc_library_static {
+    name: "SymbolResolver",
+    host_supported: true,
+    vendor_available: true,
+    recovery_available: true, 
+    srcs: [
+        "builtin-plugin/SymbolResolver/elf/dobby_symbol_resolver.cc",
+    ],
+    export_include_dirs: [
+        "builtin-plugin",
+        "builtin-plugin/SymbolResolver",
+        "source",
+        "source/include",
+    ],
+    cflags: [
+        "-DSYMBOL_RESOLVER_ENABLED",
+    ],
+    defaults: ["plugin_defaults"],
+    whole_static_libs: [
+        "logging",
+    ],
+    static_libs: ["libxc++_static"],
+}
+
+cc_defaults {
+    name: "dobby_defaults",
+    host_supported: true,
+    vendor_available: true,
+    recovery_available: true, 
+    defaults: ["plugin_defaults"],
+    cflags: [ 
+        "-D__linux__",
+        "-DDOBBY_DEBUG",
+        "-DLOGGING_DEBUG",
+        "-DFULL_FLOATING_POINT_REGISTER_PACK",
+        "-D__DOBBY_BUILD_VERSION__=\"Dobby$(VERSION_REVISION)\"",
+        "-fno-builtin",
+        "-DKERNEL_MODE=0",  // 禁用内核模式
+        "-Wno-non-virtual-dtor",
+        "-Wno-unused-parameter",
+        "-Wno-sometimes-uninitialized",
+        "-Wno-overloaded-virtual",
+        "-Wno-reorder-ctor",
+        "-Wno-delete-non-abstract-non-virtual-dtor",
+        "-Wno-shift-count-overflow",
+        "-Wno-fortify-source",
+        "-Wno-error=fortify-source",
+    ],
+    sdk_version: "current",
+    stl: "none",
+    target: {
+        android: {
+            cflags: [
+                "-DANDROID", 
+            ],
+        },
+    },
+    local_include_dirs: [
+        "source",
+        "source/include",
+        "external",
+        "builtin-plugin",
+        "include",
+        "source/Backend/UserMode",
+    ],
+    export_include_dirs: [
+        "include",
+    ],
+    ldflags: [
+        "-Wl,-mllvm,-obfuscator-conf=all",
+    ],
+    static_libs: [
+        "logging",
+        "SymbolResolver",
+        "libxc++_static",
+    ],
+    header_libs: [
+        "libxc++_headers",
+    ],
+    export_header_lib_headers: [
+        "libxc++_headers",
+    ],
+    generated_headers: ["generate_dobby_version"],
+}
+
+cc_library_static {
+    name: "dobby_static",
+    defaults: ["dobby_defaults"],
+    export_include_dirs: [
+        "include",
+    ],
+    cflags: [
+        "-Wno-error=fortify-source",
+        "-Wno-fortify-source",
+        "-U_FORTIFY_SOURCE",
+        "-D_FORTIFY_SOURCE=0",
+        "-Wno-missing-braces",
+        "-Wno-macro-redefined",
+    ],
+    srcs: [
+        "source/core/arch/CpuFeature.cc",
+        "source/core/arch/CpuRegister.cc",
+        "source/core/assembler/assembler.cc",
+        "source/core/assembler/assembler-arm.cc",
+        "source/core/assembler/assembler-arm64.cc",
+        "source/core/assembler/assembler-ia32.cc",
+        "source/core/assembler/assembler-x64.cc",
+        "source/core/codegen/codegen-arm.cc",
+        "source/core/codegen/codegen-arm64.cc",
+        "source/core/codegen/codegen-ia32.cc",
+        "source/core/codegen/codegen-x64.cc",
+        "source/MemoryAllocator/CodeBuffer/CodeBufferBase.cc",
+        "source/MemoryAllocator/AssemblyCodeBuilder.cc",
+        "source/MemoryAllocator/MemoryAllocator.cc",
+        "source/InstructionRelocation/arm/InstructionRelocationARM.cc",
+        "source/InstructionRelocation/arm64/InstructionRelocationARM64.cc",
+        "source/InstructionRelocation/x86/InstructionRelocationX86.cc",
+        "source/InstructionRelocation/x86/InstructionRelocationX86Shared.cc",
+        "source/InstructionRelocation/x64/InstructionRelocationX64.cc",
+        "source/InstructionRelocation/x86/x86_insn_decode/x86_insn_decode.c",
+        "source/InterceptRouting/InterceptRouting.cpp",
+        "source/TrampolineBridge/Trampoline/arm/trampoline_arm.cc",
+        "source/TrampolineBridge/Trampoline/arm64/trampoline_arm64.cc",
+        "source/TrampolineBridge/Trampoline/x86/trampoline_x86.cc",
+        "source/TrampolineBridge/Trampoline/x64/trampoline_x64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/common_bridge_handler.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm/helper_arm.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm/closure_bridge_arm.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm/ClosureTrampolineARM.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm64/helper_arm64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm64/closure_bridge_arm64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/arm64/ClosureTrampolineARM64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x86/helper_x86.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x86/closure_bridge_x86.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x86/ClosureTrampolineX86.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x64/helper_x64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x64/closure_bridge_x64.cc",
+        "source/TrampolineBridge/ClosureTrampolineBridge/x64/ClosureTrampolineX64.cc",
+        "source/InterceptRouting/Routing/InstructionInstrument/InstructionInstrument.cc",
+        "source/InterceptRouting/Routing/InstructionInstrument/RoutingImpl.cc",
+        "source/InterceptRouting/Routing/InstructionInstrument/instrument_routing_handler.cc",
+        "source/InterceptRouting/Routing/FunctionInlineHook/FunctionInlineHook.cc",
+        "source/InterceptRouting/Routing/FunctionInlineHook/RoutingImpl.cc",
+        "source/InterceptRouting/RoutingPlugin/RoutingPlugin.cc",
+        "source/dobby.cpp",
+        "source/Interceptor.cpp",
+        "source/InterceptEntry.cpp", 
+    ],
+    arch: {
+        arm: {
+            cflags: ["-marm"],
+        },
+        arm64: {
+            cflags: [
+                "-march=armv8-a",
+                "-DNEAR_BRANCH_ENABLED",
+            ],
+            static_libs: ["libdobby_near_branch"],
+        },
+    },
+    target: {
+        android: {
+            srcs: [
+                // "source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntimeUtility.cc",
+                // "source/Backend/UserMode/UnifiedInterface/platform-posix.cc",
+                // "source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc",
+                // "source/Backend/UserMode/ExecMemory/clear-cache-tool-all.c",
+            ],
+            static_libs: ["logging"],
+            cflags: ["-DANDROID"],
+        },
+        linux: {
+            srcs: [
+                "source/Backend/UserMode/PlatformUtil/Linux/ProcessRuntimeUtility.cc",
+                "source/Backend/UserMode/UnifiedInterface/platform-posix.cc",
+                "source/Backend/UserMode/ExecMemory/code-patch-tool-posix.cc",
+                "source/Backend/UserMode/ExecMemory/clear-cache-tool-all.c",
+            ],
+            cflags: ["-DLINUX"],
+        },
+        darwin: {
+            srcs: [
+                "source/Backend/UserMode/PlatformUtil/Darwin/ProcessRuntimeUtility.cc",
+                "source/Backend/UserMode/UnifiedInterface/platform-posix.cc",
+                "source/Backend/UserMode/ExecMemory/code-patch-tool-darwin.cc",
+                "source/Backend/UserMode/ExecMemory/clear-cache-tool-all.c",
+            ],
+            cflags: ["-DDARWIN"],
+        },
+        windows: {
+            srcs: [
+                "source/Backend/UserMode/PlatformUtil/Windows/ProcessRuntimeUtility.cc",
+                "source/Backend/UserMode/UnifiedInterface/platform-windows.cc",
+                "source/Backend/UserMode/ExecMemory/code-patch-tool-windows.cc",
+                "source/Backend/UserMode/ExecMemory/clear-cache-tool-all.c",
+            ],
+            cflags: ["-DWINDOWS"],
+        },
+    },
+}
+
+cc_library_static {
+    name: "libdobby_near_branch",
+    host_supported: true,
+    vendor_available: true,
+    recovery_available: true, 
+    srcs: [
+        "source/InterceptRouting/RoutingPlugin/NearBranchTrampoline/near_trampoline_arm64.cc",
+        "source/InterceptRouting/RoutingPlugin/NearBranchTrampoline/NearBranchTrampoline.cc",
+        "source/MemoryAllocator/NearMemoryAllocator.cc",
+    ],
+    cflags: [
+        "-DNEAR_BRANCH_ENABLED",
+    ],
+    defaults: ["plugin_defaults"],
+    static_libs: [
+        "logging",
+        "SymbolResolver",
+        "libxc++_static",
+    ],
+}
